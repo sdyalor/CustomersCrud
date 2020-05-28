@@ -20,13 +20,16 @@ struct Home: View {
   @EnvironmentObject var store: Store
   @State var edit = false
   @State var show = false
+  @State var saveAlert = false
   @State var selected: Customer = .init(id: "", firstName: "", lastName: "", email: "", phone: "")
   init(){
 //    self.store.add(customer: Customer.init(id: "\(UUID())", firstName: "Julio", lastName: "Torres", email: "julio.torres", phone: "917"))
   }
   var body: some View {
     ZStack(alignment: .top){
-      Button(action:{}){
+      Button(action:{
+        self.show.toggle()
+      }){
         Image(systemName: "plus").resizable().frame(width: 25, height: 25).padding()
       }/**ButtonEnd**/
         .background(Color.red)
@@ -34,6 +37,10 @@ struct Home: View {
         .zIndex(2)
         .foregroundColor(Color("2"))
         .padding(.top,50)
+        .sheet(isPresented:$show, content: {
+          CustomerSave(customer: self.selected, show: self.$show,saveAlert: self.$saveAlert)
+            .environmentObject(self.store)
+        })
       /**ButtonStyleEnd**/
       VStack(spacing:25 ){
         VStack{
@@ -55,14 +62,11 @@ struct Home: View {
           .background(Rounded().fill(Color.white))
           .edgesIgnoringSafeArea(.top)
         /**VStackStyleEnd**/
-        Button(action: {self.store.add(customer: Customer.init(firstName: "Julio", lastName: "Torres", email: "julio.torres", phone: "91"))}){
-          Text("Add julio")
-        }
         ScrollView(.vertical,showsIndicators: false){
           VStack(spacing: 4) {
             Text("There are \(self.store.customers.count) Customers")
             ForEach(self.store.customers, id: \.id) { customer in
-              CustomerCell(edit: self.edit, customer: customer)
+              CustomerCell(edit: self.edit,show: self.show, saveAlert: self.saveAlert, customer: customer)
 //              Text("touchme")
 //              .onLongPressGesture(perform: {
 //                self.selected = customer
@@ -75,7 +79,8 @@ struct Home: View {
         }/**ScrollViewEnd**/
       }
 
-      }.background(
+      }
+    .background(
           LinearGradient(gradient: .init(colors: [Color("2"),Color("3")]),startPoint: .leading, endPoint: .trailing).edgesIgnoringSafeArea(.all)
     )
 //      .navigationBarTitle("Customers List",displayMode: .inline)
@@ -96,9 +101,69 @@ struct Home_Previews: PreviewProvider {
         Home()
     }
 }
+struct CustomerSave: View {
+  @State var customer: Customer = .init(id: "", firstName: "", lastName: "", email: "", phone: "")
+  @Binding var show: Bool
+  @EnvironmentObject var store: Store
+  @Binding var saveAlert: Bool
+  
+  var body: some View {
+//    ZStack(alignment: .top){
+//              LinearGradient(gradient: .init(colors: [Color("2"),Color("3")]),startPoint: .leading, endPoint: .trailing).edgesIgnoringSafeArea(.all)
+////         Color.red
+//         VStack{
+//             Text("Hello World")
+//                 .font(.title)
+//             Text("Another")
+//                 .font(.body)
+//         }
+//     }
+//            .background(
+//              LinearGradient(gradient: .init(colors: [Color("2"),Color("3")]),startPoint: .leading, endPoint: .trailing).edgesIgnoringSafeArea(.all)
+//          )
+    ZStack(alignment: .top){
+      LinearGradient(gradient: .init(colors: [Color("2"),Color("3")]),startPoint: .leading, endPoint: .trailing).edgesIgnoringSafeArea(.all)
+      VStack (spacing:12){
+        VStack {
+          HStack{
+            Button(action: {
+              self.saveAlert.toggle()
+            }) {
+              Text("Save")
+            }.alert(isPresented: self.$saveAlert){ () -> Alert in
+              Alert(title: Text("Modifying"),message: Text("Are your sure?"),primaryButton: .default(Text("Ok"),action: {
+                if self.customer.id != "" {
+                  self.store.update(customer: self.customer)
+                }
+                else{
+                  self.customer.id = UUID().uuidString
+                  self.store.add(customer: self.customer)
+                }
+              self.show.toggle()
+              }),secondaryButton: .default(Text("Dismiss"),action: {self.show.toggle()}))
+            }
+          }
+        } // endHStack
+        TextField("Firstname", text: self.$customer.firstName)
+        TextField("Lastname", text: self.$customer.lastName)
+        TextField("Email", text: self.$customer.email)
+        TextField("Phone", text: self.$customer.phone)
+        //      Divider()
+      }.padding()
+//        .frame(maxWidth: .infinity,maxHeight: .infinity)
+    }
+//      .onAppear{
+//        self.customer = self.customer
+//        self.title = self.data.title
+//    }
+  }
+  
+}
 
 struct CustomerCell: View {
   var edit: Bool
+  @State var show: Bool
+  @State var saveAlert: Bool
   var customer: Customer
   @EnvironmentObject var store:Store
   var body: some View{
@@ -116,8 +181,23 @@ struct CustomerCell: View {
       }
       Text("\(customer.lastName) \(customer.firstName)").lineLimit(1)
       Spacer()
-      VStack(alignment: .leading, spacing: 5, content: {
+      HStack(spacing: 5, content: {
         Text(customer.phone)
+        if edit {
+          Button(action:{
+            if self.customer.id != "" {
+            }
+            self.show.toggle()
+          }){
+            Image(systemName: "pencil").font(.title)
+          }/**ButtonEnd**/
+            .foregroundColor(.blue)
+            .sheet(isPresented:$show, content: {
+              CustomerSave(customer: self.customer, show: self.$show,saveAlert: self.$saveAlert)
+                .environmentObject(self.store)
+            })
+          /**ButtonStyleEnd**/
+        }
       })
     }/**HStackEnd**/
       .padding()
@@ -216,7 +296,7 @@ class Store: ObservableObject {
       print(error.localizedDescription)
     }
   }
-  func update(customer:Customer,customerToDate:Customer){
+  func update(customer:Customer){
     do{
       try Firestore.firestore().document("\(collection)/\(customer.id)")
         .setData(customer.dictionary,merge:true)
